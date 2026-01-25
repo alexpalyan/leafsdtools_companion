@@ -2,86 +2,70 @@ name: Build LeafSDTools and release new version
 
 on:
   release:
-    types:
-      - published
+    types: [published]
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    strategy:
-      matrix:
-        os: [linux, macOS, windows]
-
     steps:
-      - uses: actions/checkout@v6 # v6.0.1
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v6 # v6.1.0
+        uses: actions/setup-go@v5
         with:
-          go-version: "stable"
-          go-version-file: "go.mod"
-          
+          go-version-file: go.mod
 
-      - name: Build [macOS]
-        if: matrix.os == 'macOS'
+      - name: Install fyne-cross
+        run: go install github.com/fyne-io/fyne-cross@latest
+
+      - name: Download macOS Command Line Tools DMG
         run: |
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
-          zip -9q LeafSDTools-Companion-$os-amd64.zip leafsdtools-companion LICENSE
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
-          zip -9q LeafSDTools-Companion-$os-arm64.zip leafsdtools-companion LICENSE
-          rm leafsdtools-companion
-          printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.zip)"
-          printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-arm64.zip)"
+          curl -L -o cltools.dmg https://github.com/fyne-io/fyne-cross/raw/main/internal/tool/darwin/sdk/Command_Line_Tools_for_Xcode_13.2.dmg
 
-      - name: Build [windows]
-        if: matrix.os == 'windows'
+      - name: Extract macOS SDK
         run: |
-          GOOS=$os GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o LeafSDToolsCompanion.exe main.go
-          zip -9q LeafSDTools-Companion-$os-amd64.zip LeafSDToolsCompanion.exe LICENSE
-          rm LeafSDToolsCompanion.exe
-          printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.zip)"
-        env:
-          os: ${{ matrix.os }}
+          mkdir -p sdk
+          fyne-cross darwin-sdk-extract --xcode-path cltools.dmg --output sdk
+          ls -la sdk  # should show MacOSX*.sdk
 
-      - name: Build [linux]
-        if: matrix.os == 'linux'
+      - name: Build Windows amd64
         run: |
-          GOOS=$os GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
-          tar -I 'gzip -9' -cf LeafSDTools-Companion-$os-amd64.tar.gz $cli LICENSE
-          rm leafsdtools-companion
-          printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.tar.gz)"
-        env:
-          os: ${{ matrix.os }}
+          fyne-cross windows -arch=amd64 -output=dist
+          mv dist/windows-amd64/*.zip dist/LeafSDTools-Companion-windows-amd64.zip 2>/dev/null || true
+          sha256sum dist/LeafSDTools-Companion-windows-amd64.zip | tee dist/LeafSDTools-Companion-windows-amd64.zip.sha256
 
-      - name: Upload Release Assets [macOS]
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'macOS'
+
+      - name: Build macOS universal
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SDK_PATH: ${{ github.workspace }}/sdk/MacOSX*.sdk
+        run: |
+          fyne-cross darwin -arch=amd64,arm64 \
+            --macosx-sdk-path "$SDK_PATH" \
+            -output=dist
+          mv dist/darwin-universal/*.zip dist/LeafSDTools-Companion-macos-universal.zip 2>/dev/null || true
+          sha256sum dist/LeafSDTools-Companion-macos-universal.zip | tee dist/LeafSDTools-Companion-macos-universal.zip.sha256
+
+      - name: Build Linux amd64
+        run: |
+          fyne-cross linux -arch=amd64 -output=dist
+          mv dist/linux-amd64/*.tar.gz dist/LeafSDTools-Companion-linux-amd64.tar.gz 2>/dev/null || true
+          sha256sum dist/LeafSDTools-Companion-linux-amd64.tar.gz | tee dist/LeafSDTools-Companion-linux-amd64.tar.gz.sha256
+
+      - name: Upload Release Assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools-Companion-${{ matrix.os }}-amd64.zip
-            LeafSDTools-Companion-${{ matrix.os }}-arm64.zip
-
-      - name: Upload Release Assets [windows]
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'windows'
+            dist/LeafSDTools-Companion-windows-amd64.zip
+            dist/LeafSDTools-Companion-windows-amd64.zip.sha256
+            dist/LeafSDTools-Companion-macos-universal.zip
+            dist/LeafSDTools-Companion-macos-universal.zip.sha256
+            dist/LeafSDTools-Companion-linux-amd64.tar.gz
+            dist/LeafSDTools-Companion-linux-amd64.tar.gz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: LeafSDTools-Companion-${{ matrix.os }}-amd64.zip
-
-      - name: Upload Release Assets [linux]
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
-        if: startsWith(github.ref, 'refs/tags/v') && matrix.os == 'linux'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          files: LeafSDTools-Companion-${{ matrix.os }}-amd64.tar.gz
