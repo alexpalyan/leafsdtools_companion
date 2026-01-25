@@ -66,23 +66,23 @@ jobs:
             -icon ./Icon.png \
             --release
 
-          TAR_FILE=$(ls *.tar.gz 2>/dev/null | head -n 1)
+          TAR_FILE=leafsdtools-companion.tar.xz
           if [ -z "$TAR_FILE" ]; then
             echo "Error: No .tar.gz found after fyne package"
             ls -la
             exit 1
           fi
 
-          mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.gz
-          sha256sum LeafSDTools-Companion-linux-amd64.tar.gz > LeafSDTools-Companion-linux-amd64.tar.gz.sha256
+          mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.xz
+          sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
 
       - name: Upload Linux Assets
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools-Companion-linux-amd64.tar.gz
-            LeafSDTools-Companion-linux-amd64.tar.gz.sha256
+            LeafSDTools-Companion-linux-amd64.tar.xz
+            LeafSDTools-Companion-linux-amd64.tar.xz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
