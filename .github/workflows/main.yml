@@ -30,9 +30,9 @@ jobs:
       - name: Build [macOS]
         if: matrix.os == 'macOS'
         run: |
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -trimpath -o leafsdtools-companion main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
           zip -9q LeafSDTools-Companion-$os-amd64.zip leafsdtools-companion LICENSE
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -trimpath -o leafsdtools-companion main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
           zip -9q LeafSDTools-Companion-$os-arm64.zip leafsdtools-companion LICENSE
           rm leafsdtools-companion
           printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.zip)"
@@ -41,7 +41,7 @@ jobs:
       - name: Build [windows]
         if: matrix.os == 'windows'
         run: |
-          CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go build -ldflags="-s -w -trimpath -o LeafSDToolsCompanion.exe main.go
+          CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o LeafSDToolsCompanion.exe main.go
           zip -9q LeafSDTools-Companion-$os-amd64.zip LeafSDToolsCompanion.exe LICENSE
           rm LeafSDToolsCompanion.exe
           printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.zip)"
@@ -51,7 +51,7 @@ jobs:
       - name: Build [linux]
         if: matrix.os == 'linux'
         run: |
-          CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go build -ldflags="-s -w -trimpath -o leafsdtools-companion main.go
+          CGO_ENABLED=0 GOOS=$os GOARCH=amd64 go build -ldflags="-s -w" -trimpath -o leafsdtools-companion main.go
           tar -I 'gzip -9' -cf LeafSDTools-Companion-$os-amd64.tar.gz $cli LICENSE
           rm leafsdtools-companion
           printf "sha256: %s\n" "$(shasum -a 256 LeafSDTools-Companion-$os-amd64.tar.gz)"
