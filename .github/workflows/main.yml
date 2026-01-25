@@ -63,8 +63,8 @@ jobs:
 
       - name: Build macOS universal
         run: |
-          fyne package -os darwin --release
-          zip -r -9 LeafSDTools-Companion-macos-universal.zip LeafSDToolsCompanion.app  # adjust app name if different
+          fyne-cross darwin -arch=amd64,arm64 -output=dist
+          mv dist/darwin-universal/*.zip LeafSDTools-Companion-macos-universal.zip || true
           sha256sum LeafSDTools-Companion-macos-universal.zip > LeafSDTools-Companion-macos-universal.zip.sha256
 
       - name: Upload macOS Assets
