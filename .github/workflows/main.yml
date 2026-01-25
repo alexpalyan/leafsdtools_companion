@@ -62,7 +62,7 @@ jobs:
         run: |
           fyne package \
             -os linux \
-            --name "leafsdtools-companion"
+            --name "leafsdtools-companion" \
             -icon ./Icon.png \
             --release
 
@@ -104,7 +104,7 @@ jobs:
         run: |
           fyne package \
             -os darwin \
-            --name "LeafSDTools Companion"
+            --name "LeafSDTools Companion" \
             --release
 
           APP_NAME="LeafSDTools Companion.app"
