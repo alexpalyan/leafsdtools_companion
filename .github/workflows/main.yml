@@ -59,7 +59,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install fyne tool
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+        run: go install fyne.io/tools/cmd/fyne@latest
 
       - name: Build & Package macOS universal .app
         run: |
