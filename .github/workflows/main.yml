@@ -65,9 +65,10 @@ jobs:
         run: |
           fyne package \
             -os darwin \
+            --name "LeafSDTools Companion"
             --release
 
-          APP_NAME="LeafSDToolsCompanion.app"
+          APP_NAME="LeafSDTools Companion.app"
 
           if [ -d "$APP_NAME" ]; then
             zip -r -9 LeafSDTools-Companion-macos-universal.zip "$APP_NAME"
