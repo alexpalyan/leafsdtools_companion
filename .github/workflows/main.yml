@@ -25,13 +25,13 @@ jobs:
 
       - name: Build Windows amd64
         run: |
-          fyne-cross windows -arch=amd64 -output=dist
+          fyne-cross windows -appID com.developerfromjokela.leafsdtools.companion -arch=amd64 -output=dist
           mv dist/windows-amd64/*.zip dist/LeafSDTools-Companion-windows-amd64.zip || true
           sha256sum dist/LeafSDTools-Companion-windows-amd64.zip > dist/LeafSDTools-Companion-windows-amd64.zip.sha256
 
       - name: Build Linux amd64
         run: |
-          fyne-cross linux -arch=amd64 -output=dist
+          fyne-cross linux -appID com.developerfromjokela.leafsdtools.companion -arch=amd64 -output=dist
           mv dist/linux-amd64/*.tar.gz dist/LeafSDTools-Companion-linux-amd64.tar.gz || true
           sha256sum dist/LeafSDTools-Companion-linux-amd64.tar.gz > dist/LeafSDTools-Companion-linux-amd64.tar.gz.sha256
 
@@ -58,12 +58,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Set up docker
+        uses: docker/setup-docker-action@v4.7.0
+
       - name: Install fyne-cross
         run: go install github.com/fyne-io/fyne-cross@latest
 
       - name: Build macOS universal
         run: |
-          fyne-cross darwin -arch=amd64,arm64 -output=dist
+          fyne-cross darwin -appID com.developerfromjokela.leafsdtools.companion -arch=amd64,arm64 -output=dist
           mv dist/darwin-universal/*.zip LeafSDTools-Companion-macos-universal.zip || true
           sha256sum LeafSDTools-Companion-macos-universal.zip > LeafSDTools-Companion-macos-universal.zip.sha256
 
