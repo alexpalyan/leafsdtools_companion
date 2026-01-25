@@ -30,7 +30,6 @@ jobs:
           sha256sum fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip > fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip.sha256
           
       - name: Upload Windows Assets
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -77,7 +76,6 @@ jobs:
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
 
       - name: Upload Linux Assets
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -119,7 +117,6 @@ jobs:
           fi
 
       - name: Upload macOS Assets
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
