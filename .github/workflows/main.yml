@@ -26,6 +26,8 @@ jobs:
         uses: actions/setup-go@v6 # v6.1.0
         with:
           go-version: "stable"
+          go-version-file: "go.mod"
+          
 
       - name: Build [macOS]
         if: matrix.os == 'macOS'
