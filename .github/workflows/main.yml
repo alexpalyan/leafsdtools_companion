@@ -37,7 +37,7 @@ jobs:
 
       - name: Build Windows amd64
         run: |
-          fyne package -os windows --release
+          fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
           ls -lR
           mv LeafSDTools*.zip LeafSDTools-Companion-windows-amd64.zip || true
           sha256sum LeafSDTools-Companion-windows-amd64.zip > LeafSDTools-Companion-windows-amd64.zip.sha256
