@@ -26,6 +26,7 @@ jobs:
       - name: Build Windows amd64
         run: |
           fyne-cross windows -app-id com.developerfromjokela.leafsdtools.companion -arch=amd64 -output=dist
+          ls -lR
           mv fyne-cross/dist/windows-amd64/*.zip fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip || true
           sha256sum fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip > fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip.sha256
           
@@ -71,7 +72,7 @@ jobs:
             ls -la
             exit 1
           fi
-
+          ls -lR
           mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.xz
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
 
@@ -106,7 +107,7 @@ jobs:
             --release
 
           APP_NAME="LeafSDTools Companion.app"
-
+          ls -lR
           if [ -d "$APP_NAME" ]; then
             zip -r -9 LeafSDTools-Companion-macos-universal.zip "$APP_NAME"
             sha256sum LeafSDTools-Companion-macos-universal.zip > LeafSDTools-Companion-macos-universal.zip.sha256
