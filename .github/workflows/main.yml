@@ -10,8 +10,15 @@ permissions:
 
 jobs:
   build-linux-windows:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {}
     steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          path-type: inherit
+          update: true
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -20,22 +27,27 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@latest
+      - name: Install Dependencies
+        run: >
+          pacman -Syu &&
+          pacman --noconfirm -S git zip mingw-w64-x86_64-toolchain
+
+      - name: Install Fyne tool
+        run: go install fyne.io/tools/cmd/fyne@latest
 
       - name: Build Windows amd64
         run: |
-          fyne-cross windows -app-id com.developerfromjokela.leafsdtools.companion -arch=amd64 -output=dist
+          fyne package -os windows --release
           ls -lR
-          mv fyne-cross/dist/windows-amd64/*.zip fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip || true
-          sha256sum fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip > fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip.sha256
+          mv LeafSDTools*.zip LeafSDTools-Companion-windows-amd64.zip || true
+          sha256sum LeafSDTools-Companion-windows-amd64.zip > LeafSDTools-Companion-windows-amd64.zip.sha256
           
       - name: Upload Windows Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip
-            fyne-cross/dist/LeafSDTools-Companion-windows-amd64.zip.sha256
+            LeafSDTools-Companion-windows-amd64.zip
+            LeafSDTools-Companion-windows-amd64.zip.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
