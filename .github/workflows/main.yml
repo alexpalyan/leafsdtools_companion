@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build-linux-windows:
+  build-windows:
     runs-on: windows-latest
     defaults:
       run:
@@ -39,15 +39,14 @@ jobs:
         run: |
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
           ls -lR
-          mv LeafSDTools*.zip LeafSDTools-Companion-windows-amd64.zip || true
-          sha256sum LeafSDTools-Companion-windows-amd64.zip > LeafSDTools-Companion-windows-amd64.zip.sha256
+          sha256sum LeafSDTools_Companion.exe > LeafSDTools_Companion.exe.sha256
           
       - name: Upload Windows Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools-Companion-windows-amd64.zip
-            LeafSDTools-Companion-windows-amd64.zip.sha256
+            LeafSDTools_Companion.exe
+            LeafSDTools_Companion.exe.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
