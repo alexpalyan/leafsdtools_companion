@@ -16,6 +16,8 @@ type Device struct {
 	Size int64
 }
 
+const MaxDiskSize = 130 * 1000 * 1000 * 1000
+
 func (d Device) String() string {
 	if d.Size > 0 {
 		return fmt.Sprintf("%s (%s) — %s", d.Name, d.Path, utils.HumanSize(d.Size))
