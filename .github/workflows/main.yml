@@ -49,7 +49,11 @@ jobs:
           CGO_ENABLED: 1
           CC: /clangarm64/bin/aarch64-w64-mingw32-clang
         run: |
+          export PATH="/clangarm64/bin:$PATH"
+          export PKG_CONFIG_PATH="/clangarm64/lib/pkgconfig"
+          unset CPATH LIBRARY_PATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
+          file LeafSDTools_Companion.exe
           mv LeafSDTools_Companion.exe LeafSDTools_Companion_arm64.exe
           sha256sum LeafSDTools_Companion_arm64.exe > LeafSDTools_Companion_arm64.exe.sha256
 
@@ -104,9 +108,13 @@ jobs:
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
 
       - name: Build & Package Linux arm64
+        env:
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          CC: aarch64-linux-gnu-gcc
+          CGO_CFLAGS: "-U_FORTIFY_SOURCE -Wno-error"
         run: |
-          export CC=aarch64-linux-gnu-gcc-11
-          GOARCH=arm64 fyne package \
+          fyne package \
             -os linux \
             --name "leafsdtools-companion" \
             -icon ./Icon.png \
