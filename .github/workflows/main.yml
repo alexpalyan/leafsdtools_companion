@@ -32,7 +32,7 @@ jobs:
       - name: Install Dependencies
         run: >
           pacman -Syu --noconfirm &&
-          pacman --noconfirm -S git zip mingw-w64-x86_64-toolchain mingw-w64-clang-aarch64-toolchain
+          pacman --noconfirm -S git zip mingw-w64-x86_64-toolchain
 
       - name: Install Fyne tool
         run: go install fyne.io/tools/cmd/fyne@latest
@@ -43,17 +43,49 @@ jobs:
           mv LeafSDTools_Companion.exe LeafSDTools_Companion_amd64.exe
           sha256sum LeafSDTools_Companion_amd64.exe > LeafSDTools_Companion_amd64.exe.sha256
 
-      - name: Build Windows arm64
+      - name: List artifacts
+        run: ls -lR
+
+      - name: Upload Windows Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LeafSDTools_Companion_amd64.exe
+            LeafSDTools_Companion_amd64.exe.sha256
         env:
-          GOARCH: arm64
-          CGO_ENABLED: 1
-          CC: /clangarm64/bin/aarch64-w64-mingw32-clang
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows-arm:
+    runs-on: windows-11-arm
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          update: true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install Dependencies
+        run: >
+          pacman -Syu --noconfirm &&
+          pacman --noconfirm -S git zip mingw-w64-clang-aarch64-toolchain
+
+      - name: Install Fyne tool
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Build Windows amd64
         run: |
-          export PATH="/clangarm64/bin:$PATH"
-          export PKG_CONFIG_PATH="/clangarm64/lib/pkgconfig"
-          unset CPATH LIBRARY_PATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
-          file LeafSDTools_Companion.exe
           mv LeafSDTools_Companion.exe LeafSDTools_Companion_arm64.exe
           sha256sum LeafSDTools_Companion_arm64.exe > LeafSDTools_Companion_arm64.exe.sha256
 
@@ -64,8 +96,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools_Companion_amd64.exe
-            LeafSDTools_Companion_amd64.exe.sha256
             LeafSDTools_Companion_arm64.exe
             LeafSDTools_Companion_arm64.exe.sha256
         env:
@@ -106,28 +136,35 @@ jobs:
           ls -lR
           mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.xz
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
-      - name: Install ARM64 GUI dev libraries
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs)-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
-          sudo apt-get update
-          sudo apt-get install -y \
-          libgl1-mesa-dev:arm64 \
-          libx11-dev:arm64 \
-          libxcursor-dev:arm64 \
-          libxrandr-dev:arm64 \
-          libxinerama-dev:arm64 \
-          libxi-dev:arm64 \
-          libxxf86vm-dev:arm64
-      - name: Build & Package Linux arm64
+
+      - name: Upload Linux Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LeafSDTools-Companion-linux-amd64.tar.xz
+            LeafSDTools-Companion-linux-amd64.tar.xz.sha256
         env:
-          GOARCH: arm64
-          CGO_ENABLED: 1
-          CC: aarch64-linux-gnu-gcc-11
-          CGO_CFLAGS: "-U_FORTIFY_SOURCE -Wno-error=cpp"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install fyne tool
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Install Linux dependencies for fyne package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libwayland-dev libxkbcommon-dev libgles2-mesa-dev libegl1-mesa-dev libfontconfig1-dev libfreetype6-dev libdbus-1-dev libgtk-3-dev libasound2-dev libpulse-dev
+      - name: Build & Package Linux arm64
         run: |
           fyne package \
             -os linux \
@@ -149,8 +186,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools-Companion-linux-amd64.tar.xz
-            LeafSDTools-Companion-linux-amd64.tar.xz.sha256
             LeafSDTools-Companion-linux-arm64.tar.xz
             LeafSDTools-Companion-linux-arm64.tar.xz.sha256
         env:
