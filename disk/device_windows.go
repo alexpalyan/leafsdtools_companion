@@ -17,6 +17,7 @@ const (
 	ioctlDiskGetLengthInfo          = 0x0007405C
 	ioctlStorageQueryProperty       = 0x002D1400
 	ioctlVolumeGetVolumeDiskExtents = 0x00560000
+	ioctlStorageGetDeviceNumber     = 0x002D1080
 	storageDevicePropertyID         = 0
 	propertyStandardQuery           = 0
 
