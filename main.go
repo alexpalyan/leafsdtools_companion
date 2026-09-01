@@ -47,11 +47,17 @@ func (t greenPrimaryTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) col
 
 func fixPartitionTable(path string, isDevice bool) {
 	logAppend("\n────────────────────────────────────────")
+	var hold disk.VolumeHold
 	if isDevice {
 		logAppend(fmt.Sprintf("Target device: %s", path))
-		logAppend("Unmounting volumes...")
-		if err := disk.UnmountDevice(path); err != nil {
-			logAppend("Unmount warning: " + err.Error())
+		logAppend("Locking/unmounting volumes..")
+		var herr error
+		hold, herr = disk.HoldDeviceVolumes(path)
+		if herr != nil {
+			logAppend("Could not reserve device " + herr.Error())
+			return
+		} else if hold != nil {
+			defer hold.Close()
 		}
 	} else {
 		logAppend(fmt.Sprintf("Target image: %s", path))
@@ -517,7 +523,7 @@ func main() {
 	w.SetContent(container.NewPadded(mainContent))
 	w.Resize(fyne.NewSize(820, 520))
 
-	logAppend("Leaf SD Tools Companion v1.0.2")
+	logAppend("Leaf SD Tools Companion v1.0.3")
 	logAppend("https://github.com/developerfromjokela/leafsdtools_companion")
 	logAppend("NOTE — always keep a backup of the original SD card.")
 

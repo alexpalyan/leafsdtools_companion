@@ -27,6 +27,12 @@ const (
 	// for unmount
 	fsctlLockVolume     = 0x00090018
 	fsctlDismountVolume = 0x00090020
+	fsctlUnlockVolume   = 0x0009001C
+
+	// IOCTL_DISK_SET_DISK_ATTRIBUTES
+	ioctlDiskSetDiskAttributes = 0x0007C0FC
+	diskAttributeOffline       = 0x0000000000000001
+	diskAttributeReadOnly      = 0x0000000000000002
 )
 
 // GUID_DEVINTERFACE_DISK = {53F56307-B6BF-11D0-94F2-00A0C91EFB8B}

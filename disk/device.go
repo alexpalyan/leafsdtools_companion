@@ -16,8 +16,6 @@ type Device struct {
 	Size int64
 }
 
-const MaxDiskSize = 130 * 1000 * 1000 * 1000
-
 func (d Device) String() string {
 	if d.Size > 0 {
 		return fmt.Sprintf("%s (%s) — %s", d.Name, d.Path, utils.HumanSize(d.Size))
@@ -65,9 +63,11 @@ func UnmountDevice(path string) error {
 type ProgressFunc func(written, total int64, rate float64)
 
 func CreateDiskImage(srcPath, dstPath string, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
-	if err := UnmountDevice(srcPath); err != nil {
-		return fmt.Errorf("unmounting volumes on %q: %w", srcPath, err)
+	hold, err := HoldDeviceVolumes(srcPath)
+	if err != nil {
+		return fmt.Errorf("preparing source %q: %w", srcPath, err)
 	}
+	defer hold.Close()
 
 	in, total, err := OpenDeviceForRead(srcPath)
 	if err != nil {
@@ -93,9 +93,11 @@ func CreateDiskImage(srcPath, dstPath string, bufSize int, progress ProgressFunc
 }
 
 func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, progress ProgressFunc, cancel <-chan struct{}) error {
-	if err := UnmountDevice(devicePath); err != nil {
-		return fmt.Errorf("unmounting volumes on %q: %w", devicePath, err)
+	hold, err := HoldDeviceVolumes(devicePath)
+	if err != nil {
+		return fmt.Errorf("preparing device %q: %w", devicePath, err)
 	}
+	defer hold.Close()
 
 	in, total, err := OpenDeviceForRead(imgPath)
 	if err != nil {
@@ -131,7 +133,6 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	}
 	defer img2.Close()
 
-	// Signal verify phase to UI
 	if progress != nil {
 		progress(0, total, 0)
 	}
