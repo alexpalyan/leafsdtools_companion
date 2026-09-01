@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: CLANGARM64
           path-type: inherit
           update: true
 
@@ -84,6 +84,8 @@ jobs:
         run: go install fyne.io/tools/cmd/fyne@latest
 
       - name: Build Windows arm64
+        env:
+          CC: clang
         run: |
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
           mv LeafSDTools_Companion.exe LeafSDTools_Companion_arm64.exe
