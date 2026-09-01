@@ -22,6 +22,10 @@ const (
 
 	diskExtentsHeaderSize = 8
 	diskExtentSize        = 24
+
+	// for unmount
+	fsctlLockVolume     = 0x00090018
+	fsctlDismountVolume = 0x00090020
 )
 
 type getLengthInformation struct {

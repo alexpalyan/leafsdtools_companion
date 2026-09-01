@@ -11,12 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const (
-	fsctlLockVolume                 = 0x00090018
-	fsctlDismountVolume             = 0x00090020
-	ioctlVolumeGetVolumeDiskExtents = 0x00560000
-)
-
 func unmountDevicePlatform(devicePath string) error {
 	// typically \\.\PHYSICALDRIVE N
 	driveNum, err := physicalDriveNumber(devicePath)
