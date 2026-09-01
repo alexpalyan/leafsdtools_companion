@@ -112,7 +112,7 @@ jobs:
           GOARCH: arm64
           CGO_ENABLED: 1
           CC: aarch64-linux-gnu-gcc-11
-          CGO_CFLAGS: "-U_FORTIFY_SOURCE -Wno-error"
+          CGO_CFLAGS: "-U_FORTIFY_SOURCE -Wno-error=cpp"
         run: |
           fyne package \
             -os linux \
