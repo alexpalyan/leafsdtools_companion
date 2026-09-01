@@ -113,8 +113,27 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	}
 	defer out.Close()
 
+	// On cancel, close endpoints so a blocked Read/Write unblocks.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-cancel:
+			_ = in.Close()
+			_ = out.Close()
+		case <-done:
+		}
+	}()
+
 	if err := copyStream(in, out, total, bufSize, progress, cancel); err != nil {
 		return err
+	}
+
+	// Ensure data hits the device before verify / close.
+	if syncer, ok := out.(interface{ Sync() error }); ok {
+		if err := syncer.Sync(); err != nil {
+			return fmt.Errorf("sync after write: %w", err)
+		}
 	}
 
 	if !verify {
@@ -138,12 +157,22 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	if progress != nil {
 		progress(0, total, 0)
 	}
-	return verifyStream(img2, out, total, bufSize, progress, cancel)
+
+	// Read can block forever. Only compare exactly "total" bytes from the image.
+	var deviceReader io.Reader = out
+	if total > 0 {
+		deviceReader = io.LimitReader(out, total)
+	}
+	return verifyStream(io.LimitReader(img2, total), deviceReader, total, bufSize, progress, cancel)
 }
 
 func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
 	if bufSize <= 0 {
 		bufSize = 4 * 1024 * 1024
+	}
+	// Prefer multiple of 4KiB for block devices.
+	if bufSize%4096 != 0 {
+		bufSize = (bufSize/4096 + 1) * 4096
 	}
 	buf := make([]byte, bufSize)
 
@@ -172,10 +201,20 @@ func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress 
 
 		n, rerr := in.Read(buf)
 		if n > 0 {
-			if _, werr := out.Write(buf[:n]); werr != nil {
-				return fmt.Errorf("writing at offset %d: %w", written, werr)
+			off := 0
+			for off < n {
+				nw, werr := out.Write(buf[off:n])
+				if nw > 0 {
+					off += nw
+					written += int64(nw)
+				}
+				if werr != nil {
+					return fmt.Errorf("writing at offset %d: %w", written, werr)
+				}
+				if nw == 0 {
+					return fmt.Errorf("writing at offset %d: short write", written)
+				}
 			}
-			written += int64(n)
 			if time.Since(lastReport) > 300*time.Millisecond {
 				report()
 				lastReport = time.Now()
@@ -195,6 +234,9 @@ func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress 
 func verifyStream(expected io.Reader, actual io.Reader, total int64, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
 	if bufSize <= 0 {
 		bufSize = 4 * 1024 * 1024
+	}
+	if bufSize%4096 != 0 {
+		bufSize = (bufSize/4096 + 1) * 4096
 	}
 	a := make([]byte, bufSize)
 	b := make([]byte, bufSize)
@@ -222,8 +264,25 @@ func verifyStream(expected io.Reader, actual io.Reader, total int64, bufSize int
 		default:
 		}
 
-		na, erra := io.ReadFull(expected, a)
-		nb, errb := io.ReadFull(actual, b)
+		if total > 0 && checked >= total {
+			report()
+			return nil
+		}
+
+		toRead := len(a)
+		if total > 0 {
+			remain := total - checked
+			if remain < int64(toRead) {
+				toRead = int(remain)
+			}
+		}
+		if toRead <= 0 {
+			report()
+			return nil
+		}
+
+		na, erra := io.ReadFull(expected, a[:toRead])
+		nb, errb := io.ReadFull(actual, b[:toRead])
 
 		n := na
 		if nb < n {
@@ -242,6 +301,11 @@ func verifyStream(expected io.Reader, actual io.Reader, total int64, bufSize int
 				report()
 				lastReport = time.Now()
 			}
+		}
+
+		if checked >= total && total > 0 {
+			report()
+			return nil
 		}
 
 		if erra == io.EOF || erra == io.ErrUnexpectedEOF {
