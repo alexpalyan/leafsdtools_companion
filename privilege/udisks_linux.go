@@ -9,9 +9,21 @@ import (
 	"strings"
 
 	"github.com/godbus/dbus/v5"
+	"golang.org/x/sys/unix"
 )
 
-func openViaUDisks2(devicePath, mode string) (io.ReadWriteCloser, int64, error) {
+// DirectCapableFile wraps a device fd obtained from UDisks2 and reports
+// whether it was actually opened with O_DIRECT.
+type DirectCapableFile struct {
+	*os.File
+	direct bool
+}
+
+// DirectIO reports whether writes/reads on this file bypass the page cache
+// (opened with O_DIRECT).
+func (d *DirectCapableFile) DirectIO() bool { return d.direct }
+
+func openViaUDisks2(devicePath, mode string, tryDirect bool) (*DirectCapableFile, int64, error) {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		return nil, 0, fmt.Errorf("connecting to D-Bus system bus: %w", err)
@@ -21,14 +33,46 @@ func openViaUDisks2(devicePath, mode string) (io.ReadWriteCloser, int64, error) 
 	blockPath := udisks2BlockObjectPath(devicePath)
 	obj := conn.Object("org.freedesktop.UDisks2", blockPath)
 
-	var fd dbus.UnixFD
-	options := map[string]dbus.Variant{}
-	call := obj.Call("org.freedesktop.UDisks2.Block.OpenDevice", 0, mode, options)
-	if call.Err != nil {
-		return nil, 0, fmt.Errorf("udisks2 OpenDevice(%s, %s): %w", blockPath, mode, call.Err)
+	open := func(flags int32) (dbus.UnixFD, error) {
+		options := map[string]dbus.Variant{}
+		if flags != 0 {
+			options["flags"] = dbus.MakeVariant(flags)
+		}
+		var fd dbus.UnixFD
+		call := obj.Call("org.freedesktop.UDisks2.Block.OpenDevice", 0, mode, options)
+		if call.Err != nil {
+			return 0, call.Err
+		}
+		if err := call.Store(&fd); err != nil {
+			return 0, err
+		}
+		return fd, nil
 	}
-	if err := call.Store(&fd); err != nil {
-		return nil, 0, fmt.Errorf("reading udisks2 OpenDevice reply: %w", err)
+
+	var (
+		fd      dbus.UnixFD
+		direct  bool
+		openErr error
+	)
+
+	if tryDirect && mode != "r" {
+		if f, derr := open(int32(unix.O_DIRECT | unix.O_EXCL)); derr == nil {
+			fd = f
+			direct = true
+		} else {
+			openErr = derr
+		}
+	}
+
+	if !direct {
+		f, derr := open(0)
+		if derr != nil {
+			if openErr != nil {
+				return nil, 0, fmt.Errorf("udisks2 OpenDevice(%s, %s) failed with O_DIRECT (%v) and without it: %w", blockPath, mode, openErr, derr)
+			}
+			return nil, 0, fmt.Errorf("udisks2 OpenDevice(%s, %s): %w", blockPath, mode, derr)
+		}
+		fd = f
 	}
 
 	f := os.NewFile(uintptr(fd), devicePath)
@@ -36,7 +80,7 @@ func openViaUDisks2(devicePath, mode string) (io.ReadWriteCloser, int64, error) 
 	if fi, statErr := f.Stat(); statErr == nil {
 		size = fi.Size()
 	}
-	return f, size, nil
+	return &DirectCapableFile{File: f, direct: direct}, size, nil
 }
 
 func udisks2BlockObjectPath(devicePath string) dbus.ObjectPath {
@@ -46,3 +90,5 @@ func udisks2BlockObjectPath(devicePath string) dbus.ObjectPath {
 	}
 	return dbus.ObjectPath("/org/freedesktop/UDisks2/block_devices/" + name)
 }
+
+var _ io.ReadWriteCloser = (*DirectCapableFile)(nil)

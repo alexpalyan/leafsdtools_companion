@@ -18,7 +18,7 @@ func openElevatedDevicePlatform(devicePath string, write bool) (io.ReadWriteClos
 	if write {
 		mode = "rw"
 	}
-	if rc, size, err := openViaUDisks2(devicePath, mode); err == nil {
+	if rc, size, err := openViaUDisks2(devicePath, mode, write); err == nil {
 		return rc, size, nil
 	}
 	if write {

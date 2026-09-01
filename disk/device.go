@@ -16,7 +16,10 @@ type Device struct {
 	Size int64
 }
 
-const MaxDiskSize = 130 * 1000 * 1000 * 1000
+const (
+	MaxDiskSize   = 130 * 1000 * 1000 * 1000
+	directIOAlign = 4096
+)
 
 func (d Device) String() string {
 	if d.Size > 0 {
@@ -64,6 +67,13 @@ func UnmountDevice(path string) error {
 
 type ProgressFunc func(written, total int64, rate float64)
 
+// directIOAware implemented by device handles that may have been opened
+// with O_DIRECT
+type directIOAware interface{ DirectIO() bool }
+
+// fdGetter is implemented by *os.File and anything embedding it.
+type fdGetter interface{ Fd() uintptr }
+
 func CreateDiskImage(srcPath, dstPath string, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
 	hold, err := HoldDeviceVolumes(srcPath)
 	if err != nil {
@@ -91,7 +101,7 @@ func CreateDiskImage(srcPath, dstPath string, bufSize int, progress ProgressFunc
 	}
 	defer out.Close()
 
-	return copyStream(in, out, total, bufSize, progress, cancel)
+	return copyStream(in, out, total, bufSize, false, progress, cancel)
 }
 
 func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, progress ProgressFunc, cancel <-chan struct{}) error {
@@ -113,6 +123,11 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	}
 	defer out.Close()
 
+	direct := false
+	if d, ok := out.(directIOAware); ok {
+		direct = d.DirectIO()
+	}
+
 	// On cancel, close endpoints so a blocked Read/Write unblocks.
 	done := make(chan struct{})
 	defer close(done)
@@ -125,15 +140,12 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 		}
 	}()
 
-	if err := copyStream(in, out, total, bufSize, progress, cancel); err != nil {
+	if err := copyStream(in, out, total, bufSize, direct, progress, cancel); err != nil {
 		return err
 	}
 
-	// Ensure data hits the device before verify / close.
-	if syncer, ok := out.(interface{ Sync() error }); ok {
-		if err := syncer.Sync(); err != nil {
-			return fmt.Errorf("sync after write: %w", err)
-		}
+	if err := syncDevice(out, total, progress, cancel); err != nil {
+		return err
 	}
 
 	if !verify {
@@ -146,6 +158,12 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	}
 	if _, err := seeker.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking device for verify: %w", err)
+	}
+
+	// Drop any cached pages for the range we just wrote so a verify read
+	// can't be silently satisfied from cache instead of physical media.
+	if fg, ok := out.(fdGetter); ok {
+		dropCachedPages(fg.Fd(), total)
 	}
 
 	img2, err := os.Open(imgPath)
@@ -163,18 +181,59 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 	if total > 0 {
 		deviceReader = io.LimitReader(out, total)
 	}
-	return verifyStream(io.LimitReader(img2, total), deviceReader, total, bufSize, progress, cancel)
+	return verifyStream(io.LimitReader(img2, total), deviceReader, total, bufSize, direct, progress, cancel)
 }
 
-func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
+// syncDevice flushes out to the physical device.
+func syncDevice(out io.Writer, total int64, progress ProgressFunc, cancel <-chan struct{}) error {
+	syncer, ok := out.(interface{ Sync() error })
+	if !ok {
+		return nil
+	}
+
+	syncDone := make(chan error, 1)
+	go func() { syncDone <- syncer.Sync() }()
+
+	start := time.Now()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	const maxWait = 15 * time.Minute
+	deadline := time.After(maxWait)
+
+	for {
+		select {
+		case err := <-syncDone:
+			if err != nil {
+				return fmt.Errorf("syncing device: %w", err)
+			}
+			return nil
+		case <-ticker.C:
+			if progress != nil {
+				progress(-1, total, time.Since(start).Seconds())
+			}
+		case <-deadline:
+			return fmt.Errorf("device did not finish flushing writes to media after %s - it may have failed or disconnected", maxWait)
+		case <-cancel:
+			return fmt.Errorf("cancelled during sync")
+		}
+	}
+}
+
+func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, direct bool, progress ProgressFunc, cancel <-chan struct{}) error {
 	if bufSize <= 0 {
 		bufSize = 4 * 1024 * 1024
 	}
-	// Prefer multiple of 4KiB for block devices.
-	if bufSize%4096 != 0 {
-		bufSize = (bufSize/4096 + 1) * 4096
+	// for O_DIRECT.
+	if bufSize%directIOAlign != 0 {
+		bufSize = (bufSize/directIOAlign + 1) * directIOAlign
 	}
-	buf := make([]byte, bufSize)
+	var buf []byte
+	if direct {
+		buf = alignedBuffer(bufSize)
+	} else {
+		buf = make([]byte, bufSize)
+	}
 
 	var written int64
 	start := time.Now()
@@ -201,9 +260,23 @@ func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress 
 
 		n, rerr := in.Read(buf)
 		if n > 0 {
+			writeBuf := buf[:n]
+
+			// O_DIRECT requires the write length to be a multiple of
+			// directIOAlign. The final chunk of an image whose size isn't
+			// an exact multiple of it can't satisfy that, so fall back to
+			// buffered I/O for just that last write.
+			if direct && n%directIOAlign != 0 {
+				if fg, ok := out.(fdGetter); ok {
+					if clrErr := clearDirectIO(fg.Fd()); clrErr == nil {
+						direct = false
+					}
+				}
+			}
+
 			off := 0
 			for off < n {
-				nw, werr := out.Write(buf[off:n])
+				nw, werr := out.Write(writeBuf[off:])
 				if nw > 0 {
 					off += nw
 					written += int64(nw)
@@ -231,15 +304,21 @@ func copyStream(in io.Reader, out io.Writer, total int64, bufSize int, progress 
 	return nil
 }
 
-func verifyStream(expected io.Reader, actual io.Reader, total int64, bufSize int, progress ProgressFunc, cancel <-chan struct{}) error {
+func verifyStream(expected io.Reader, actual io.Reader, total int64, bufSize int, direct bool, progress ProgressFunc, cancel <-chan struct{}) error {
 	if bufSize <= 0 {
 		bufSize = 4 * 1024 * 1024
 	}
-	if bufSize%4096 != 0 {
-		bufSize = (bufSize/4096 + 1) * 4096
+	if bufSize%directIOAlign != 0 {
+		bufSize = (bufSize/directIOAlign + 1) * directIOAlign
 	}
-	a := make([]byte, bufSize)
-	b := make([]byte, bufSize)
+	var a, b []byte
+	if direct {
+		a = alignedBuffer(bufSize)
+		b = alignedBuffer(bufSize)
+	} else {
+		a = make([]byte, bufSize)
+		b = make([]byte, bufSize)
+	}
 
 	var checked int64
 	start := time.Now()

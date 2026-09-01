@@ -439,7 +439,16 @@ func buildRestoreTab() fyne.CanvasObject {
 		go func() {
 			err := disk.RestoreDiskImage(imgPath, dst.Path, 4*1024*1024, doVerify, func(written, total int64, rate float64) {
 				fyne.Do(func() {
-					if phase == "Writing" && written == 0 && progress.Value > 0.5 {
+					// written == -1 is the "flushing to device" sentinel
+					if written == -1 {
+						if phase != "Flushing" {
+							phase = "Flushing"
+							logAppend("Write finished, flushing to device (this can take a while on slow media)...")
+						}
+						status.SetText(fmt.Sprintf("Flushing to device — %ds", int64(rate)))
+						return
+					}
+					if (phase == "Writing" || phase == "Flushing") && written == 0 && progress.Value > 0.5 {
 						phase = "Verifying"
 						fyne.CurrentApp().Settings().SetTheme(greenPrimaryTheme{Theme: theme.DefaultTheme()})
 						logAppend("Writing done, verifying...")
@@ -523,7 +532,7 @@ func main() {
 	w.SetContent(container.NewPadded(mainContent))
 	w.Resize(fyne.NewSize(820, 520))
 
-	logAppend("Leaf SD Tools Companion v1.0.4")
+	logAppend("Leaf SD Tools Companion v1.0.5")
 	logAppend("https://github.com/developerfromjokela/leafsdtools_companion")
 	logAppend("NOTE — always keep a backup of the original SD card.")
 
