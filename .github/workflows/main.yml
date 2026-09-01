@@ -106,7 +106,22 @@ jobs:
           ls -lR
           mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.xz
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
-
+      - name: Install ARM64 GUI dev libraries
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs) main restricted universe multiverse" | sudo tee /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs)-updates main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ $(lsb_release -cs)-security main restricted universe multiverse" | sudo tee -a /etc/apt/sources.list.d/arm64.list
+          sudo apt-get update
+          sudo apt-get install -y \
+          libgl1-mesa-dev:arm64 \
+          libx11-dev:arm64 \
+          libxcursor-dev:arm64 \
+          libxrandr-dev:arm64 \
+          libxinerama-dev:arm64 \
+          libxi-dev:arm64 \
+          libxxf86vm-dev:arm64
       - name: Build & Package Linux arm64
         env:
           GOARCH: arm64
