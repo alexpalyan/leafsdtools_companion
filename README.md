@@ -4,4 +4,8 @@ This utility is a helper utility for [LeafSDTools](https://github.com/developerf
 
 ## Current features
 - Make hidden system partitions visible on SD Card
+- Backup and Restore SD card
 - Patches (coming later)
+
+## Windows
+Please run the program as administrator, sometimes Windows does some nasty things and writes fail.
