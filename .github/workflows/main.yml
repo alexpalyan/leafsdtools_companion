@@ -83,7 +83,7 @@ jobs:
       - name: Install Fyne tool
         run: go install fyne.io/tools/cmd/fyne@latest
 
-      - name: Build Windows amd64
+      - name: Build Windows arm64
         run: |
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
           mv LeafSDTools_Companion.exe LeafSDTools_Companion_arm64.exe
