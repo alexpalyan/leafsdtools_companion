@@ -17,8 +17,10 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
+          msystem: MINGW64
           path-type: inherit
           update: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -29,8 +31,8 @@ jobs:
 
       - name: Install Dependencies
         run: >
-          pacman -Syu &&
-          pacman --noconfirm -S git zip mingw-w64-x86_64-toolchain
+          pacman -Syu --noconfirm &&
+          pacman --noconfirm -S git zip mingw-w64-x86_64-toolchain mingw-w64-clang-aarch64-toolchain
 
       - name: Install Fyne tool
         run: go install fyne.io/tools/cmd/fyne@latest
@@ -38,15 +40,30 @@ jobs:
       - name: Build Windows amd64
         run: |
           fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
-          ls -lR
-          sha256sum LeafSDTools_Companion.exe > LeafSDTools_Companion.exe.sha256
-          
+          mv LeafSDTools_Companion.exe LeafSDTools_Companion_amd64.exe
+          sha256sum LeafSDTools_Companion_amd64.exe > LeafSDTools_Companion_amd64.exe.sha256
+
+      - name: Build Windows arm64
+        env:
+          GOARCH: arm64
+          CGO_ENABLED: 1
+          CC: /clangarm64/bin/aarch64-w64-mingw32-clang
+        run: |
+          fyne package --app-id com.developerfromjokela.leafsdtools.companion -os windows --release
+          mv LeafSDTools_Companion.exe LeafSDTools_Companion_arm64.exe
+          sha256sum LeafSDTools_Companion_arm64.exe > LeafSDTools_Companion_arm64.exe.sha256
+
+      - name: List artifacts
+        run: ls -lR
+
       - name: Upload Windows Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LeafSDTools_Companion.exe
-            LeafSDTools_Companion.exe.sha256
+            LeafSDTools_Companion_amd64.exe
+            LeafSDTools_Companion_amd64.exe.sha256
+            LeafSDTools_Companion_arm64.exe
+            LeafSDTools_Companion_arm64.exe.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,7 +86,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libwayland-dev libxkbcommon-dev libgles2-mesa-dev libegl1-mesa-dev libfontconfig1-dev libfreetype6-dev libdbus-1-dev libgtk-3-dev libasound2-dev libpulse-dev
 
-      - name: Build & Package Linux
+      - name: Build & Package Linux amd64
         run: |
           fyne package \
             -os linux \
@@ -87,12 +104,32 @@ jobs:
           mv "$TAR_FILE" LeafSDTools-Companion-linux-amd64.tar.xz
           sha256sum LeafSDTools-Companion-linux-amd64.tar.xz > LeafSDTools-Companion-linux-amd64.tar.xz.sha256
 
+      - name: Build & Package Linux arm64
+        run: |
+          GOARCH=arm64 fyne package \
+            -os linux \
+            --name "leafsdtools-companion" \
+            -icon ./Icon.png \
+            --release
+
+          TAR_FILE=leafsdtools-companion.tar.xz
+          if [ -z "$TAR_FILE" ]; then
+            echo "Error: No .tar.gz found after fyne package"
+            ls -la
+            exit 1
+          fi
+          ls -lR
+          mv "$TAR_FILE" LeafSDTools-Companion-linux-arm64.tar.xz
+          sha256sum LeafSDTools-Companion-linux-arm64.tar.xz > LeafSDTools-Companion-linux-arm64.tar.xz.sha256
+
       - name: Upload Linux Assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
             LeafSDTools-Companion-linux-amd64.tar.xz
             LeafSDTools-Companion-linux-amd64.tar.xz.sha256
+            LeafSDTools-Companion-linux-arm64.tar.xz
+            LeafSDTools-Companion-linux-arm64.tar.xz.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
