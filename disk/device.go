@@ -144,9 +144,7 @@ func RestoreDiskImage(imgPath, devicePath string, bufSize int, verify bool, prog
 		return err
 	}
 
-	if err := syncDevice(out, total, progress, cancel); err != nil {
-		return err
-	}
+	_ = syncDevice(out, total, progress, cancel)
 
 	if !verify {
 		return nil
