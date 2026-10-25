@@ -64,89 +64,6 @@ type BuildConfig struct {
 	Timer      *TimerConfig
 }
 
-var Builds = map[string]*BuildConfig{
-	"G218ENNI.120": { // ZE1, 2018+
-		Name:       "G218ENNI.120",
-		ModLen:     31984640,
-		Sec0File:   0xa7c000,
-		Sec0VA:     0x413d1000,
-		GetContext: 0x41b2f560,
-		SetVar:     0x41b2f3d0,
-		CheckVar:   0x41b2f3e0,
-		GetState:   0x41b2f430,
-		GetState2:  0x41b2f3f0,
-		EvHandler:  0x41b2f640,
-		ExecFn:     0x41b2f5b0,
-		SetTimer:   0x41b2f650,
-		Skip: &SkipConfig{
-			VA:         0x41a0a5c0,
-			Tail:       0x41a0a680,
-			PTrue:      0x41a0a690,
-			VarSkip:    73,
-			VarAgree:   257,
-			VarStartup: 628,
-			Action:     4892,
-			Ctrl:       25,
-			Notify:     1687,
-			Stock: []uint32{
-				0xeb0493e6, 0xe58d0134, 0xe59f20bc, 0xe3a01049, 0xe59d0134,
-				0xeb04937d, 0xeb0493e0, 0xe58d0138, 0xe59d0138, 0xeb049391,
-				0xe58d013c, 0xe301131c, 0xe59d013c, 0xeb049411, 0xe58d0140,
-				0xe59d3140, 0xe3530000, 0x1a000007, 0xeb0493d4, 0xe58d0144,
-				0xe59d0144, 0xeb049375, 0xe58d0148, 0xe301131c, 0xe59d0148,
-				0xeb049405, 0xe3a03001, 0xe58d3000, 0xea000012,
-			},
-		},
-		Timer: &TimerConfig{
-			VA:         0x419b8290,
-			Tail:       0x419bb13c,
-			PTrue:      0x419b91c8,
-			PFalse:     0x419b91cc,
-			VarStartup: 628,
-			Event:      0xc93,
-			Stock: []uint32{
-				0xeb05dcb2, 0xe58d0004, 0xe59f2f2c, 0xe3a01f9d, 0xe59d0004,
-				0xeb05dc4d, 0xe58d0008, 0xe59d3008, 0xe3530000, 0x0a000005,
-				0xeb05dca8, 0xe58d000c, 0xe59f2f00, 0xe3a01f9d, 0xe59d000c,
-				0xeb05dc3f, 0xe3a03001, 0xe58d3000, 0xea000b97,
-			},
-		},
-	},
-	"G214ELNI.062": { // ZE0, 2014-2017
-		Name:       "G214ELNI.062",
-		ModLen:     30647808,
-		Sec0File:   0xa11000,
-		Sec0VA:     0x412e1000,
-		GetContext: 0x419d376c,
-		SetVar:     0x419d35dc,
-		CheckVar:   0x419d35ec,
-		GetState:   0x419d363c,
-		GetState2:  0x419d35fc,
-		EvHandler:  0x419d384c,
-		ExecFn:     0x419d37bc,
-		SetTimer:   0x419d385c,
-		Skip: &SkipConfig{
-			VA:         0x418b6488,
-			Tail:       0x418b6530,
-			PTrue:      0x418b6540,
-			VarSkip:    47,
-			VarAgree:   223,
-			VarStartup: 563,
-			Action:     4676,
-			Ctrl:       25,
-			Notify:     1609,
-			Stock: []uint32{
-				0xeb0474b7, 0xe58d00d4, 0xe59f20a4, 0xe3a0102f, 0xe59d00d4,
-				0xeb04744e, 0xeb0474b1, 0xe58d00d8, 0xe59d00d8, 0xeb047462,
-				0xe58d00dc, 0xe3011244, 0xe59d00dc, 0xeb0474e2, 0xe58d00e0,
-				0xe59d30e0, 0xe3530000, 0x1a000007, 0xeb0474a5, 0xe58d00e4,
-				0xe59d00e4, 0xeb047446, 0xe58d00e8, 0xe3011244, 0xe59d00e8,
-				0xeb0474d6, 0xe3a03001, 0xe58d3000, 0xea00000c,
-			},
-		},
-	},
-}
-
 func ssum(b []byte) uint32 {
 	var sum uint32
 	n := len(b) / 4
@@ -405,8 +322,7 @@ func readSectorAt(r io.ReaderAt, at int64) ([]byte, error) {
 	return nil, fmt.Errorf("failed to read sector at offset %#x", at)
 }
 
-// FindMod scans r at 512-byte boundaries for a known navigation .mod header.
-// It uses sector-aligned reads to ensure compatibility with raw devices (/dev/rdiskN, O_DIRECT).
+// FindMod scans r at 512-byte boundaries for any Clarion navigation .mod image and extracts its BuildConfig.
 func FindMod(r io.ReaderAt, size int64) (int64, *BuildConfig, error) {
 	step := int64(1 << 20)
 	off := int64(0)
@@ -420,7 +336,6 @@ func FindMod(r io.ReaderAt, size int64) (int64, *BuildConfig, error) {
 		if size > 0 && off+readLen > size {
 			readLen = size - off
 		}
-		// Align readLen to 512 bytes for raw device compatibility
 		if readLen%512 != 0 {
 			readLen = (readLen / 512) * 512
 		}
@@ -434,39 +349,31 @@ func FindMod(r io.ReaderAt, size int64) (int64, *BuildConfig, error) {
 		}
 		chunk := buf[:n]
 
-		for name, b := range Builds {
-			needle := []byte(name)
-			pos := 0
-			for {
-				idx := bytes.Index(chunk[pos:], needle)
-				if idx < 0 {
-					break
-				}
-				i := pos + idx
-				at := off + int64(i) - 0x16
-				if at >= 0 && at%512 == 0 {
-					// Check header: first see if it's already in chunk memory
-					chunkOffset := int(at - off)
-					var sec []byte
-					if chunkOffset >= 0 && chunkOffset+512 <= len(chunk) {
-						sec = chunk[chunkOffset : chunkOffset+512]
-					} else {
-						// Otherwise perform a sector-aligned read
-						var sErr error
-						sec, sErr = readSectorAt(r, at)
-						if sErr != nil {
-							pos = i + 1
-							continue
+		pos := 0
+		for {
+			idx := bytes.Index(chunk[pos:], []byte("MTCP"))
+			if idx < 0 {
+				break
+			}
+			mtOff := pos + idx
+			at := off + int64(mtOff) - 0x200
+			if at >= 0 && at%512 == 0 {
+				sec, sErr := readSectorAt(r, at)
+				if sErr == nil && bytes.Equal(sec[0x30:0x34], []byte("SUM4")) {
+					nChunks := binary.LittleEndian.Uint32(chunk[mtOff+4 : mtOff+8])
+					if nChunks > 0 && nChunks < 100 {
+						modLen := int64(binary.LittleEndian.Uint32(sec[:4])) + 0x200
+						modData := make([]byte, modLen)
+						if _, rErr := r.ReadAt(modData, at); rErr == nil {
+							b, lErr := LocateBuildConfig(modData)
+							if lErr == nil && b != nil {
+								return at, b, nil
+							}
 						}
 					}
-
-					modLen := int64(binary.LittleEndian.Uint32(sec[:4])) + 0x200
-					if modLen == b.ModLen {
-						return at, b, nil
-					}
 				}
-				pos = i + 1
 			}
+			pos = mtOff + 1
 		}
 
 		if err != nil {
@@ -475,7 +382,7 @@ func FindMod(r io.ReaderAt, size int64) (int64, *BuildConfig, error) {
 		off += step
 	}
 
-	return 0, nil, errors.New("no nav image known to this patcher was found")
+	return 0, nil, errors.New("no Clarion navigation image was found")
 }
 
 // detectAlreadyPatched checks whether the .mod or its target chunk is already patched.
@@ -606,12 +513,6 @@ func PatchMod(m []byte, b *BuildConfig, mode PatchMode, delayMs uint32, log func
 	if mode != ModeSkip && mode != ModeTimer {
 		return nil, fmt.Errorf("invalid patch mode: %s", mode)
 	}
-	if mode == ModeTimer && b.Timer == nil {
-		return nil, fmt.Errorf("timer mode is not supported for build %s", b.Name)
-	}
-	if mode == ModeTimer && (delayMs == 0 || delayMs > 65535) {
-		return nil, fmt.Errorf("timer delay must be between 1 and 65535 ms (got %d)", delayMs)
-	}
 
 	// Boundary and corruption validations
 	if int64(len(m)) < b.ModLen {
@@ -622,6 +523,10 @@ func PatchMod(m []byte, b *BuildConfig, mode PatchMode, delayMs uint32, log func
 	}
 
 	segOff := 0x200
+	// Fast check for already patched image via compensating word at MTCP+0x1c
+	if binary.LittleEndian.Uint32(m[segOff+0x1c:segOff+0x20]) != 0 {
+		return nil, errors.New("navigation image is already patched (compensating word present at MTCP+0x1c)")
+	}
 	segSz := int(binary.LittleEndian.Uint32(m[0x98:0x9c]))
 	if segSz < 0x20 || segOff+segSz > len(m) {
 		return nil, fmt.Errorf("corrupt image: invalid segment size %d", segSz)
